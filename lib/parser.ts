@@ -55,28 +55,46 @@ export async function parseDocument(filePath: string, filename: string): Promise
 }
 
 async function parsePdf(filePath: string): Promise<string> {
-  const dataBuffer = fs.readFileSync(filePath);
-  const data = await pdfParse(dataBuffer);
-  return data.text;
+  try {
+    const dataBuffer = fs.readFileSync(filePath);
+    const data = await pdfParse(dataBuffer);
+    return data.text || '';
+  } catch (err) {
+    console.error('PDF parse error:', err);
+    return '';
+  }
 }
 
 async function parseDocx(filePath: string): Promise<string> {
-  const result = await mammoth.extractRawText({ path: filePath });
-  return result.value;
+  try {
+    const result = await mammoth.extractRawText({ path: filePath });
+    return result.value || '';
+  } catch (err) {
+    console.error('DOCX parse error:', err);
+    return '';
+  }
 }
 
 async function parseSpreadsheet(filePath: string): Promise<string> {
-  const workbook = XLSX.readFile(filePath);
-  let text = '';
+  try {
+    const workbook = XLSX.readFile(filePath);
+    let text = '';
 
-  workbook.SheetNames.forEach((sheetName) => {
-    const sheet = workbook.Sheets[sheetName];
-    const range = sheet['!ref'] || 'A1';
-    const data = XLSX.utils.sheet_to_txt(sheet);
-    text += `\n[Sheet: ${sheetName}]\n${data}`;
-  });
+    workbook.SheetNames.forEach((sheetName) => {
+      try {
+        const sheet = workbook.Sheets[sheetName];
+        const data = XLSX.utils.sheet_to_txt(sheet);
+        text += `\n[Sheet: ${sheetName}]\n${data}`;
+      } catch (err) {
+        console.error(`Error parsing sheet ${sheetName}:`, err);
+      }
+    });
 
-  return text;
+    return text || '';
+  } catch (err) {
+    console.error('Spreadsheet parse error:', err);
+    return '';
+  }
 }
 
 function extractFields(text: string): ExtractedField[] {
