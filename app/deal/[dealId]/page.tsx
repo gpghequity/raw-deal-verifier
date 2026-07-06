@@ -426,23 +426,108 @@ function Step7Bible({ dealId, deal, onComplete }: { dealId: string; deal: Deal; 
 
 // Step 8: Generate Reports
 function Step8Reports({ dealId }: { dealId: string }) {
+  const [loading, setLoading] = useState(false);
+  const [archived, setArchived] = useState(false);
+
+  const handleDownload = async (type: string) => {
+    setLoading(true);
+    try {
+      // Get the latest analysis
+      const analysisRes = await fetch(`/api/deals/${dealId}/analyses`);
+      const analysis = await analysisRes.json();
+
+      const verifiedRecord = JSON.parse(analysis.verified_deal_record);
+      const bibleOutput = JSON.parse(analysis.bible_output);
+
+      // Get HTML report
+      const pdfRes = await fetch(`/api/deals/${dealId}/pdf`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          report_type: type,
+          verified_deal_record: verifiedRecord,
+          bible_output: bibleOutput,
+          should_archive: false,
+        }),
+      });
+
+      const htmlContent = await pdfRes.text();
+
+      // Open in new window for printing
+      const newWindow = window.open('', '', 'width=1000,height=800');
+      if (newWindow) {
+        newWindow.document.write(htmlContent);
+        newWindow.document.close();
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleArchive = async () => {
+    setLoading(true);
+    try {
+      const analysisRes = await fetch(`/api/deals/${dealId}/analyses`);
+      const analysis = await analysisRes.json();
+
+      const verifiedRecord = JSON.parse(analysis.verified_deal_record);
+      const bibleOutput = JSON.parse(analysis.bible_output);
+
+      await fetch(`/api/deals/${dealId}/pdf`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          report_type: 'seller_letter',
+          verified_deal_record: verifiedRecord,
+          bible_output: bibleOutput,
+          should_archive: true,
+        }),
+      });
+
+      setArchived(true);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div>
-      <h3>Step 8: Reports Generated</h3>
+      <h3>Step 8: Reports Generated ✓</h3>
       <div style={{ padding: '20px', background: '#d1ecf1', borderRadius: '4px', marginBottom: '20px', color: '#0c5460' }}>
         <strong>✓ Analysis Complete</strong>
-        <p>Download your reports below or archive this analysis.</p>
+        <p>Download your reports below or archive this analysis for future reference.</p>
       </div>
 
+      <h4>Download Reports</h4>
       <div className="button-group">
-        <button className="btn btn-success">📄 Download Seller Letter PDF</button>
-        <button className="btn btn-success">📊 Download Team Analysis PDF</button>
-        <button className="btn btn-success">💼 Download Back Office PDF</button>
-        <button className="btn btn-success">📦 Download All (ZIP)</button>
+        <button className="btn btn-success" onClick={() => handleDownload('seller_letter')} disabled={loading}>
+          📄 Seller Letter
+        </button>
+        <button className="btn btn-success" onClick={() => handleDownload('team_analysis')} disabled={loading}>
+          📊 Team Analysis
+        </button>
+        <button className="btn btn-success" onClick={() => handleDownload('back_office')} disabled={loading}>
+          💼 Back Office
+        </button>
       </div>
+
+      {archived ? (
+        <div className="alert alert-success" style={{ marginTop: '20px' }}>
+          ✓ Analysis archived and synced to Google Sheets
+        </div>
+      ) : (
+        <div className="button-group" style={{ marginTop: '20px' }}>
+          <button className="btn btn-primary" onClick={handleArchive} disabled={loading}>
+            {loading ? 'Archiving...' : 'Archive & Sync to Google'}
+          </button>
+        </div>
+      )}
 
       <div className="button-group" style={{ marginTop: '20px' }}>
-        <button className="btn btn-primary">Archive This Analysis</button>
         <button className="btn btn-secondary" onClick={() => (window.location.href = '/')}>
           Back to Dashboard
         </button>

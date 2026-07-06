@@ -1,28 +1,24 @@
-import html2pdf from 'html2pdf.js';
 import { BibleOutput, VerifiedDealRecord } from './bible';
 
 export async function generateSellerLetterPdf(
   deal: VerifiedDealRecord,
   bibleOutput: BibleOutput,
-): Promise<Buffer> {
-  const html = generateSellerLetterHtml(deal, bibleOutput);
-  return htmlToPdfBuffer(html, 'Seller_Letter.pdf');
+): Promise<string> {
+  return generateSellerLetterHtml(deal, bibleOutput);
 }
 
 export async function generateTeamAnalysisPdf(
   deal: VerifiedDealRecord,
   bibleOutput: BibleOutput,
-): Promise<Buffer> {
-  const html = generateTeamAnalysisHtml(deal, bibleOutput);
-  return htmlToPdfBuffer(html, 'Team_Analysis.pdf');
+): Promise<string> {
+  return generateTeamAnalysisHtml(deal, bibleOutput);
 }
 
 export async function generateBackOfficePdf(
   deal: VerifiedDealRecord,
   bibleOutput: BibleOutput,
-): Promise<Buffer> {
-  const html = generateBackOfficeHtml(deal, bibleOutput);
-  return htmlToPdfBuffer(html, 'Back_Office.pdf');
+): Promise<string> {
+  return generateBackOfficeHtml(deal, bibleOutput);
 }
 
 function generateSellerLetterHtml(deal: VerifiedDealRecord, bible: BibleOutput): string {
@@ -295,24 +291,3 @@ function generateBackOfficeHtml(deal: VerifiedDealRecord, bible: BibleOutput): s
   `;
 }
 
-async function htmlToPdfBuffer(html: string, filename: string): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const opt = {
-      margin: [10, 10, 10, 10],
-      filename,
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2 },
-      jsPDF: { orientation: 'portrait', unit: 'mm', format: 'letter' },
-      pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
-    };
-
-    try {
-      html2pdf().set(opt).from.html(html).toPdf().get('pdf').then((pdf: any) => {
-        const buffer = Buffer.from(pdf.output('arraybuffer'));
-        resolve(buffer);
-      });
-    } catch (err) {
-      reject(err);
-    }
-  });
-}

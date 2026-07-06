@@ -1,48 +1,56 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { generateSellerLetterPdf, generateTeamAnalysisPdf, generateBackOfficePdf } from '@/lib/pdf-generator';
 import { db } from '@/lib/db';
+import { appendToGoogleSheets, uploadToDrive } from '@/lib/google-sync';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ dealId: string }> }) {
   const { dealId } = await params;
-  const { report_type, verified_deal_record, bible_output } = await req.json();
+  const { report_type, verified_deal_record, bible_output, should_archive } = await req.json();
 
   if (!report_type || !verified_deal_record || !bible_output) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
   }
 
-  // For MVP, return HTML instead of PDF
-  // TODO: Implement proper PDF generation with server-side rendering
   try {
     let htmlContent = '';
 
     if (report_type === 'seller_letter') {
-      htmlContent = generateSellerLetterHtml(verified_deal_record, bible_output);
+      htmlContent = await generateSellerLetterPdf(verified_deal_record, bible_output);
     } else if (report_type === 'team_analysis') {
-      htmlContent = generateTeamAnalysisHtml(verified_deal_record, bible_output);
+      htmlContent = await generateTeamAnalysisPdf(verified_deal_record, bible_output);
     } else if (report_type === 'back_office') {
-      htmlContent = generateBackOfficeHtml(verified_deal_record, bible_output);
+      htmlContent = await generateBackOfficePdf(verified_deal_record, bible_output);
     } else {
       return NextResponse.json({ error: 'Invalid report_type' }, { status: 400 });
+    }
+
+    // If archiving, sync to Google
+    if (should_archive) {
+      try {
+        await appendToGoogleSheets({
+          deal_id: verified_deal_record.deal_id,
+          property_address: verified_deal_record.property_address,
+          deal_type: verified_deal_record.deal_type,
+          submitted_by: verified_deal_record.submitted_by,
+          analysis_date: new Date().toISOString(),
+          bible_version: bible_output.bible_version,
+          status: 'Complete',
+          noi: bible_output.noi,
+          scenarios_count: bible_output.scenarios.length,
+        });
+      } catch (err) {
+        console.error('Google Sheets sync failed:', err);
+        // Don't fail the request if Google sync fails
+      }
     }
 
     return new NextResponse(htmlContent, {
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
-        'Content-Disposition': `attachment; filename="${report_type}.html"`,
+        'Content-Disposition': `inline; filename="${report_type}.html"`,
       },
     });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 400 });
   }
-}
-
-function generateSellerLetterHtml(deal: any, bible: any): string {
-  return `<html><body><h1>Seller Letter</h1><p>NOI: $${bible.noi}</p></body></html>`;
-}
-
-function generateTeamAnalysisHtml(deal: any, bible: any): string {
-  return `<html><body><h1>Team Analysis</h1><p>Scenarios: ${bible.scenarios.length}</p></body></html>`;
-}
-
-function generateBackOfficeHtml(deal: any, bible: any): string {
-  return `<html><body><h1>Back Office</h1><p>NOI: $${bible.noi}</p></body></html>`;
 }

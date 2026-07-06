@@ -2,6 +2,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { VerifiedDealRecord, BibleOutput } from './bible';
 
+// Use file-based storage for MVP (works on Vercel without external DB)
 const DATA_DIR = path.join(process.cwd(), 'data');
 
 async function ensureDataDir() {
@@ -132,6 +133,7 @@ export const db = {
     const deal = deals[dealId];
     if (deal) {
       deal.current_version = version;
+      deals[dealId] = deal;
       await writeDeals(deals);
     }
 
@@ -149,9 +151,13 @@ export const db = {
     return matching[0] || null;
   },
 
+  getAllAnalyses: async (dealId: string): Promise<AnalysisRecord[]> => {
+    const analyses = await readAnalyses();
+    return analyses.filter((a) => a.deal_id === dealId).sort((a, b) => b.version - a.version);
+  },
+
   saveUpload: async (dealId: string, filename: string, filePath: string, fileType: string, parsedText: string): Promise<string> => {
     const uploadId = `upload_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    // In MVP, just track uploads in memory or in deal record
     return uploadId;
   },
 
