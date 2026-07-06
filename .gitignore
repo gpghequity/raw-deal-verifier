@@ -1,0 +1,17 @@
+node_modules/
+.next/
+out/
+build/
+*.log
+.env
+.env.local
+.env.*.local
+data/
+*.db
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+dist/
+.turbo/
