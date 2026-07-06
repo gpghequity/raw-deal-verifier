@@ -2,8 +2,18 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { VerifiedDealRecord, BibleOutput } from './bible';
 
-// Use /tmp for Vercel (writable on serverless)
-const DATA_DIR = process.env.NODE_ENV === 'production' ? '/tmp/raw-deal-verifier' : path.join(process.cwd(), 'data');
+// Try to use Vercel KV in production, fallback to file storage
+let kv: any = null;
+if (process.env.NODE_ENV === 'production') {
+  try {
+    const kvModule = require('@vercel/kv');
+    kv = kvModule;
+  } catch (err) {
+    console.log('KV not available, using file storage');
+  }
+}
+
+const DATA_DIR = path.join(process.cwd(), 'data');
 
 async function ensureDataDir() {
   try {
@@ -67,7 +77,6 @@ async function writeAnalyses(analyses: AnalysisRecord[]) {
 
 export const db = {
   createDeal: async (id: string, name: string, address: string, dealType: string, submittedBy: string): Promise<DealRecord> => {
-    const deals = await readDeals();
     const now = Date.now();
     const deal: DealRecord = {
       id,
@@ -79,18 +88,57 @@ export const db = {
       current_version: 1,
       status: 'draft',
     };
-    deals[id] = deal;
-    await writeDeals(deals);
+
+    if (kv) {
+      // Store in Vercel KV
+      await kv.set(`deal:${id}`, JSON.stringify(deal), { ex: 86400 * 7 }); // 7 day TTL
+    } else {
+      // Fallback to file storage
+      const deals = await readDeals();
+      deals[id] = deal;
+      await writeDeals(deals);
+    }
+
     return deal;
   },
 
   getDeal: async (id: string): Promise<DealRecord | null> => {
+    if (kv) {
+      try {
+        const data = await kv.get(`deal:${id}`);
+        if (!data) return null;
+        return JSON.parse(typeof data === 'string' ? data : String(data));
+      } catch (err) {
+        console.error('KV get error:', err);
+      }
+    }
+
+    // Fallback to file storage
     const deals = await readDeals();
     return deals[id] || null;
   },
 
   listDeals: async (searchAddress?: string, searchType?: string): Promise<DealRecord[]> => {
-    const deals = await readDeals();
+    let deals: Record<string, DealRecord> = {};
+
+    if (kv) {
+      try {
+        const keys = await kv.keys('deal:*');
+        for (const key of keys) {
+          const data = await kv.get(key);
+          if (data) {
+            const deal = JSON.parse(typeof data === 'string' ? data : String(data));
+            deals[deal.id] = deal;
+          }
+        }
+      } catch (err) {
+        console.error('KV list error:', err);
+        deals = await readDeals();
+      }
+    } else {
+      deals = await readDeals();
+    }
+
     let results = Object.values(deals);
 
     if (searchAddress) {
@@ -112,7 +160,6 @@ export const db = {
     verifiedRecord: VerifiedDealRecord,
     bibleOutput: BibleOutput,
   ): Promise<AnalysisRecord> => {
-    const analyses = await readAnalyses();
     const now = Date.now();
 
     const analysis: AnalysisRecord = {
@@ -125,33 +172,90 @@ export const db = {
       created_date: now,
     };
 
-    analyses.push(analysis);
-    await writeAnalyses(analyses);
+    if (kv) {
+      await kv.set(`analysis:${dealId}:${version}`, JSON.stringify(analysis), { ex: 86400 * 7 });
+      // Update deal version in KV
+      const deal = await db.getDeal(dealId);
+      if (deal) {
+        deal.current_version = version;
+        await kv.set(`deal:${dealId}`, JSON.stringify(deal), { ex: 86400 * 7 });
+      }
+    } else {
+      const analyses = await readAnalyses();
+      analyses.push(analysis);
+      await writeAnalyses(analyses);
 
-    // Update deal version
-    const deals = await readDeals();
-    const deal = deals[dealId];
-    if (deal) {
-      deal.current_version = version;
-      deals[dealId] = deal;
-      await writeDeals(deals);
+      const deals = await readDeals();
+      const deal = deals[dealId];
+      if (deal) {
+        deal.current_version = version;
+        deals[dealId] = deal;
+        await writeDeals(deals);
+      }
     }
 
     return analysis;
   },
 
   getAnalysis: async (dealId: string, version: number): Promise<AnalysisRecord | null> => {
+    if (kv) {
+      try {
+        const data = await kv.get(`analysis:${dealId}:${version}`);
+        if (!data) return null;
+        return JSON.parse(typeof data === 'string' ? data : String(data));
+      } catch (err) {
+        console.error('KV analysis get error:', err);
+      }
+    }
+
     const analyses = await readAnalyses();
     return analyses.find((a) => a.deal_id === dealId && a.version === version) || null;
   },
 
   getLatestAnalysis: async (dealId: string): Promise<AnalysisRecord | null> => {
+    if (kv) {
+      try {
+        const keys = await kv.keys(`analysis:${dealId}:*`);
+        if (keys.length === 0) return null;
+
+        const analyses = [];
+        for (const key of keys) {
+          const data = await kv.get(key);
+          if (data) {
+            analyses.push(JSON.parse(typeof data === 'string' ? data : String(data)));
+          }
+        }
+
+        return analyses.sort((a, b) => b.version - a.version)[0] || null;
+      } catch (err) {
+        console.error('KV latest analysis error:', err);
+      }
+    }
+
     const analyses = await readAnalyses();
     const matching = analyses.filter((a) => a.deal_id === dealId).sort((a, b) => b.version - a.version);
     return matching[0] || null;
   },
 
   getAllAnalyses: async (dealId: string): Promise<AnalysisRecord[]> => {
+    if (kv) {
+      try {
+        const keys = await kv.keys(`analysis:${dealId}:*`);
+        const analyses = [];
+
+        for (const key of keys) {
+          const data = await kv.get(key);
+          if (data) {
+            analyses.push(JSON.parse(typeof data === 'string' ? data : String(data)));
+          }
+        }
+
+        return analyses.sort((a, b) => b.version - a.version);
+      } catch (err) {
+        console.error('KV all analyses error:', err);
+      }
+    }
+
     const analyses = await readAnalyses();
     return analyses.filter((a) => a.deal_id === dealId).sort((a, b) => b.version - a.version);
   },
