@@ -2,8 +2,8 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { VerifiedDealRecord, BibleOutput } from './bible';
 
-// Use file-based storage for MVP (works on Vercel without external DB)
-const DATA_DIR = path.join(process.cwd(), 'data');
+// Use /tmp for Vercel (writable on serverless)
+const DATA_DIR = process.env.NODE_ENV === 'production' ? '/tmp/raw-deal-verifier' : path.join(process.cwd(), 'data');
 
 async function ensureDataDir() {
   try {
