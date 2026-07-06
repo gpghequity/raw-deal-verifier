@@ -24,6 +24,8 @@ export default function HomePage() {
     setSuccess('');
 
     try {
+      console.log('Creating deal with:', formData);
+
       const response = await fetch('/api/deals', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -33,19 +35,26 @@ export default function HomePage() {
         }),
       });
 
+      console.log('Response status:', response.status);
+
       if (!response.ok) {
-        throw new Error('Failed to create deal');
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+        throw new Error(`Server error: ${response.status} - ${errorText}`);
       }
 
       const deal = await response.json();
-      setSuccess(`Deal created successfully! ID: ${deal.id}`);
+      console.log('Deal created:', deal);
+
+      setSuccess(`Deal created successfully! Redirecting...`);
 
       // Redirect to deal workflow
       setTimeout(() => {
         window.location.href = `/deal/${deal.id}`;
-      }, 1000);
+      }, 500);
     } catch (err) {
-      setError(String(err));
+      console.error('Create deal error:', err);
+      setError(`Error: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setLoading(false);
     }
