@@ -13,6 +13,16 @@ interface Deal {
   status: string;
 }
 
+interface DealState {
+  asking_price: string;
+  gross_income: string;
+  annual_expenses: string;
+  occupancy: string;
+  units: string;
+  year_built: string;
+  [key: string]: string;
+}
+
 export default function DealPage() {
   const params = useParams();
   const dealId = params.dealId as string;
@@ -20,6 +30,19 @@ export default function DealPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [currentStep, setCurrentStep] = useState(1);
+
+  // SHARED STATE - PERSISTS ACROSS STEPS
+  const [dealData, setDealData] = useState<DealState>({
+    asking_price: '',
+    gross_income: '',
+    annual_expenses: '',
+    occupancy: '',
+    units: '',
+    year_built: '',
+  });
+
+  const [uploadedFiles, setUploadedFiles] = useState<any[]>([]);
+  const [bibleOutput, setBibleOutput] = useState<any>(null);
 
   useEffect(() => {
     const fetchDeal = async () => {
@@ -61,11 +84,7 @@ export default function DealPage() {
         <div style={{ marginTop: '20px' }}>
           <strong>Deal ID:</strong> {deal.id}
           <br />
-          <strong>Version:</strong> {deal.current_version}
-          <br />
-          <strong>Status:</strong> {deal.status}
-          <br />
-          <strong>Created:</strong> {new Date(deal.created_date).toLocaleDateString()}
+          <strong>Deal Type:</strong> {deal.deal_type}
         </div>
 
         <div className="button-group" style={{ marginTop: '20px' }}>
@@ -76,54 +95,61 @@ export default function DealPage() {
       </div>
 
       <div className="screen">
-        <h2 style={{ marginBottom: '20px' }}>9-Step Workflow</h2>
+        <h2 style={{ marginBottom: '20px' }}>9-Step Workflow (Step {currentStep})</h2>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '30px' }}>
-          {[
-            { step: 1, title: 'Deal Created', desc: '✓ Complete' },
-            { step: 2, title: 'Upload Documents', desc: 'Upload files' },
-            { step: 3, title: 'Parse & Extract', desc: 'Parse OCR' },
-            { step: 4, title: 'Verify Fields', desc: 'User edits' },
-            { step: 5, title: 'Missing Questions', desc: 'Fill blanks' },
-            { step: 6, title: 'Review', desc: 'Validate' },
-            { step: 7, title: 'Run Bible', desc: 'Execute' },
-            { step: 8, title: 'Generate Reports', desc: 'PDFs' },
-            { step: 9, title: 'Archive & Sync', desc: 'Save' },
-          ].map((item) => (
-            <div
-              key={item.step}
-              onClick={() => setCurrentStep(item.step)}
-              style={{
-                padding: '15px',
-                border: currentStep === item.step ? '2px solid #0066cc' : '1px solid #ddd',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                background: currentStep === item.step ? '#f0f7ff' : 'white',
-              }}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '10px', marginBottom: '30px' }}>
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((step) => (
+            <button
+              key={step}
+              onClick={() => setCurrentStep(step)}
+              className={`btn ${currentStep === step ? 'btn-primary' : 'btn-secondary'}`}
+              style={{ padding: '10px', fontSize: '12px' }}
             >
-              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#0066cc' }}>Step {item.step}</div>
-              <div style={{ fontWeight: '600', marginTop: '5px' }}>{item.title}</div>
-              <div style={{ fontSize: '12px', color: '#666', marginTop: '3px' }}>{item.desc}</div>
-            </div>
+              Step {step}
+            </button>
           ))}
         </div>
 
-        {currentStep === 2 && <Step2Upload dealId={dealId} onComplete={() => setCurrentStep(3)} />}
-        {currentStep === 3 && <Step3Parse dealId={dealId} onComplete={() => setCurrentStep(4)} />}
-        {currentStep === 4 && <Step4Verify dealId={dealId} deal={deal} onComplete={() => setCurrentStep(5)} />}
-        {currentStep === 5 && <Step5Questions dealId={dealId} deal={deal} onComplete={() => setCurrentStep(6)} />}
-        {currentStep === 6 && <Step6Review dealId={dealId} deal={deal} onComplete={() => setCurrentStep(7)} />}
-        {currentStep === 7 && <Step7Bible dealId={dealId} deal={deal} onComplete={() => setCurrentStep(8)} />}
-        {currentStep === 8 && <Step8Reports dealId={dealId} />}
+        {currentStep === 1 && <Step1Start dealId={dealId} deal={deal} onContinue={() => setCurrentStep(2)} />}
+        {currentStep === 2 && (
+          <Step2Upload
+            dealId={dealId}
+            uploadedFiles={uploadedFiles}
+            setUploadedFiles={setUploadedFiles}
+            onContinue={() => setCurrentStep(3)}
+          />
+        )}
+        {currentStep === 3 && <Step3ExtractFields dealId={dealId} uploadedFiles={uploadedFiles} dealData={dealData} setDealData={setDealData} onContinue={() => setCurrentStep(4)} />}
+        {currentStep === 4 && <Step4VerifyFields dealData={dealData} setDealData={setDealData} onContinue={() => setCurrentStep(5)} />}
+        {currentStep === 5 && <Step5Questions deal={deal} dealData={dealData} setDealData={setDealData} onContinue={() => setCurrentStep(6)} />}
+        {currentStep === 6 && <Step6Review dealData={dealData} onContinue={() => setCurrentStep(7)} />}
+        {currentStep === 7 && <Step7Bible dealId={dealId} deal={deal} dealData={dealData} setBibleOutput={setBibleOutput} onContinue={() => setCurrentStep(8)} />}
+        {currentStep === 8 && <Step8Reports dealId={dealId} bibleOutput={bibleOutput} dealData={dealData} />}
       </div>
     </div>
   );
 }
 
-// Step 2: Upload & Text Input
-function Step2Upload({ dealId, onComplete }: { dealId: string; onComplete: () => void }) {
+function Step1Start({ dealId, deal, onContinue }: any) {
+  return (
+    <div>
+      <h3>Step 1: Deal Created ✓</h3>
+      <div style={{ padding: '20px', background: '#d4edda', borderRadius: '4px', color: '#155724', marginBottom: '20px' }}>
+        <strong>{deal.deal_name}</strong> created successfully
+        <p style={{ margin: '10px 0 0 0', fontSize: '14px' }}>{deal.property_address} ({deal.deal_type})</p>
+      </div>
+      <p>Ready to upload documents and begin analysis.</p>
+      <div className="button-group">
+        <button className="btn btn-primary" onClick={onContinue}>
+          Continue to Upload
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Step2Upload({ dealId, uploadedFiles, setUploadedFiles, onContinue }: any) {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [textInput, setTextInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -134,12 +160,13 @@ function Step2Upload({ dealId, onComplete }: { dealId: string; onComplete: () =>
   };
 
   const handleUpload = async () => {
-    if (selectedFiles.length === 0 && !textInput) {
-      setMessage('Please upload files or paste text');
+    if (selectedFiles.length === 0) {
+      setMessage('Please select files');
       return;
     }
 
     setLoading(true);
+    setMessage('');
 
     try {
       const formData = new FormData();
@@ -150,14 +177,21 @@ function Step2Upload({ dealId, onComplete }: { dealId: string; onComplete: () =>
         body: formData,
       });
 
-      if (!response.ok) throw new Error('Upload failed');
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Upload failed: ${text}`);
+      }
 
       const result = await response.json();
-      setMessage(`Uploaded ${result.uploads.length} files successfully`);
+      console.log('Upload result:', result);
 
-      setTimeout(() => onComplete(), 1500);
+      setUploadedFiles(result.uploads);
+      setMessage(`✓ Uploaded ${result.success} files successfully`);
+
+      setTimeout(() => onContinue(), 1000);
     } catch (err) {
-      setMessage(`Error: ${err}`);
+      console.error('Upload error:', err);
+      setMessage(`✗ Error: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setLoading(false);
     }
@@ -165,7 +199,7 @@ function Step2Upload({ dealId, onComplete }: { dealId: string; onComplete: () =>
 
   return (
     <div>
-      <h3>Step 2: Upload Documents & Text</h3>
+      <h3>Step 2: Upload Documents</h3>
       <div className="file-upload" onClick={() => document.getElementById('fileInput')?.click()}>
         <div style={{ fontSize: '24px' }}>📁</div>
         <div className="file-upload-text">Click to select files or drag and drop</div>
@@ -175,7 +209,7 @@ function Step2Upload({ dealId, onComplete }: { dealId: string; onComplete: () =>
 
       {selectedFiles.length > 0 && (
         <div style={{ marginTop: '15px' }}>
-          <strong>Selected files:</strong>
+          <strong>Selected files ({selectedFiles.length}):</strong>
           <ul>
             {selectedFiles.map((f) => (
               <li key={f.name}>{f.name}</li>
@@ -184,101 +218,85 @@ function Step2Upload({ dealId, onComplete }: { dealId: string; onComplete: () =>
         </div>
       )}
 
-      <div className="form-group" style={{ marginTop: '20px' }}>
-        <label>Or paste property data</label>
-        <textarea value={textInput} onChange={(e) => setTextInput(e.target.value)} placeholder="Paste operating memo, proforma, P&L, rent roll, etc..." />
-      </div>
-
-      {message && <div className="alert alert-info">{message}</div>}
-
-      <div className="button-group">
-        <button className="btn btn-primary" onClick={handleUpload} disabled={loading}>
-          {loading ? 'Uploading...' : 'Upload & Continue'}
-        </button>
-        <button className="btn btn-secondary" onClick={onComplete}>
-          Skip to Questions
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// Step 3: Parse & OCR (stub)
-function Step3Parse({ dealId, onComplete }: { dealId: string; onComplete: () => void }) {
-  useEffect(() => {
-    setTimeout(() => onComplete(), 2000);
-  }, [onComplete]);
-
-  return (
-    <div>
-      <h3>Step 3: Parsing & OCR</h3>
-      <div style={{ padding: '20px', background: '#f0f7ff', borderRadius: '4px' }}>
-        <div className="loading"></div>
-        <p>Parsing uploaded documents... Extracting structured data...</p>
-      </div>
-    </div>
-  );
-}
-
-// Step 4: Verify Fields
-function Step4Verify({ dealId, deal, onComplete }: { dealId: string; deal: Deal; onComplete: () => void }) {
-  const [fields, setFields] = useState<any[]>([
-    { name: 'asking_price', value: '', source: 'Manual', confidence: 'low', status: 'missing' },
-    { name: 'gross_income', value: '', source: 'Manual', confidence: 'low', status: 'missing' },
-    { name: 'annual_expenses', value: '', source: 'Manual', confidence: 'low', status: 'missing' },
-    { name: 'occupancy', value: '', source: 'Manual', confidence: 'low', status: 'missing' },
-    { name: 'units', value: '', source: 'Manual', confidence: 'low', status: 'missing' },
-  ]);
-
-  const handleFieldChange = (index: number, value: string) => {
-    const newFields = [...fields];
-    newFields[index].value = value;
-    newFields[index].status = value ? 'edited' : 'missing';
-    setFields(newFields);
-  };
-
-  const handleContinue = async () => {
-    // Save fields and continue
-    onComplete();
-  };
-
-  return (
-    <div>
-      <h3>Step 4: Verify Extracted Fields</h3>
-      <p style={{ marginBottom: '20px', color: '#666' }}>Review and edit extracted fields. Mark complete when ready.</p>
-
-      <table className="table">
-        <thead>
-          <tr>
-            <th>Field</th>
-            <th>Value</th>
-            <th>Source</th>
-            <th>Confidence</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {fields.map((field, idx) => (
-            <tr key={idx}>
-              <td>{field.name}</td>
-              <td>
-                <input
-                  type="text"
-                  value={field.value}
-                  onChange={(e) => handleFieldChange(idx, e.target.value)}
-                  style={{ width: '100%', padding: '5px', border: '1px solid #ddd', borderRadius: '3px' }}
-                />
-              </td>
-              <td>{field.source}</td>
-              <td>{field.confidence}</td>
-              <td>{field.status}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {message && <div className={`alert ${message.startsWith('✓') ? 'alert-success' : 'alert-error'}`} style={{ marginTop: '15px' }}>{message}</div>}
 
       <div className="button-group" style={{ marginTop: '20px' }}>
-        <button className="btn btn-primary" onClick={handleContinue}>
+        <button className="btn btn-primary" onClick={handleUpload} disabled={loading || selectedFiles.length === 0}>
+          {loading ? 'Uploading...' : 'Upload Files'}
+        </button>
+        <button className="btn btn-secondary" onClick={onContinue}>
+          Skip Upload → Go to Manual Entry
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Step3ExtractFields({ dealId, uploadedFiles, dealData, setDealData, onContinue }: any) {
+  const [extracting, setExtracting] = useState(false);
+
+  useEffect(() => {
+    // Extract fields from uploaded files
+    if (uploadedFiles.length > 0) {
+      setExtracting(true);
+      const extracted: any = {};
+
+      uploadedFiles.forEach((file: any) => {
+        if (file.extracted_fields && file.extracted_fields.length > 0) {
+          file.extracted_fields.forEach((field: any) => {
+            extracted[field.name] = String(field.value);
+          });
+        }
+      });
+
+      setDealData((prev: any) => ({ ...prev, ...extracted }));
+      setExtracting(false);
+    }
+  }, [uploadedFiles, setDealData]);
+
+  return (
+    <div>
+      <h3>Step 3: Extract Fields from Documents</h3>
+      {extracting ? (
+        <div style={{ padding: '20px', background: '#f0f7ff', borderRadius: '4px' }}>
+          <div className="loading"></div>
+          <p>Extracting fields from {uploadedFiles.length} documents...</p>
+        </div>
+      ) : (
+        <div style={{ padding: '15px', background: '#d4edda', borderRadius: '4px', color: '#155724', marginBottom: '20px' }}>
+          ✓ Extraction complete. {Object.values(dealData).filter((v) => v).length} fields extracted.
+        </div>
+      )}
+
+      <div className="button-group" style={{ marginTop: '20px' }}>
+        <button className="btn btn-primary" onClick={onContinue} disabled={extracting}>
+          Continue to Verify
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Step4VerifyFields({ dealData, setDealData, onContinue }: any) {
+  return (
+    <div>
+      <h3>Step 4: Verify & Edit Fields</h3>
+      <p style={{ marginBottom: '20px', color: '#666' }}>Edit any extracted values:</p>
+
+      {Object.keys(dealData).map((key) => (
+        <div key={key} className="form-group">
+          <label>{key.replace(/_/g, ' ').toUpperCase()}</label>
+          <input
+            type="text"
+            value={dealData[key]}
+            onChange={(e) => setDealData({ ...dealData, [key]: e.target.value })}
+            placeholder={`Enter ${key}`}
+          />
+        </div>
+      ))}
+
+      <div className="button-group">
+        <button className="btn btn-primary" onClick={onContinue}>
           Continue to Questions
         </button>
       </div>
@@ -286,76 +304,85 @@ function Step4Verify({ dealId, deal, onComplete }: { dealId: string; deal: Deal;
   );
 }
 
-// Step 5: Missing Questions
-function Step5Questions({ dealId, deal, onComplete }: { dealId: string; deal: Deal; onComplete: () => void }) {
-  const [answers, setAnswers] = useState<any>({});
+function Step5Questions({ deal, dealData, setDealData, onContinue }: any) {
+  const requiredFields = ['gross_income', 'annual_expenses', 'units'];
 
-  const bibleMissingFields = {
-    'Single Family': ['asking_price', 'gross_income', 'annual_expenses', 'units', 'year_built'],
-    Multifamily: ['asking_price', 'gross_income', 'annual_expenses', 'units', 'year_built', 'occupancy'],
-    'Self Storage': ['asking_price', 'gross_income', 'annual_expenses', 'units', 'year_built'],
-  };
-
-  const requiredFields = bibleMissingFields[deal.deal_type as keyof typeof bibleMissingFields] || [];
-
-  const handleAnswerChange = (field: string, value: string) => {
-    setAnswers({ ...answers, [field]: value });
-  };
+  const allAnswered = requiredFields.every((field) => dealData[field]);
 
   return (
     <div>
-      <h3>Step 5: Answer Missing Required Questions</h3>
+      <h3>Step 5: Answer Required Questions</h3>
       <p style={{ marginBottom: '20px', color: '#666' }}>
-        {Object.keys(answers).length} of {requiredFields.length} questions answered
+        {requiredFields.filter((f) => dealData[f]).length} of {requiredFields.length} answered
       </p>
 
       {requiredFields.map((field) => (
         <div key={field} className="form-group">
           <label>{field.replace(/_/g, ' ').toUpperCase()}</label>
-          <input type="text" value={answers[field] || ''} onChange={(e) => handleAnswerChange(field, e.target.value)} placeholder="Enter value..." />
+          <input
+            type="text"
+            value={dealData[field] || ''}
+            onChange={(e) => setDealData({ ...dealData, [field]: e.target.value })}
+            placeholder={`Enter ${field}`}
+          />
         </div>
       ))}
 
       <div className="button-group">
-        <button
-          className="btn btn-primary"
-          onClick={onComplete}
-          disabled={Object.keys(answers).length < requiredFields.length}
-        >
-          Continue to Review
+        <button className="btn btn-primary" onClick={onContinue} disabled={!allAnswered}>
+          {allAnswered ? 'Continue to Review' : 'Answer all questions first'}
         </button>
       </div>
     </div>
   );
 }
 
-// Step 6: Review
-function Step6Review({ dealId, deal, onComplete }: { dealId: string; deal: Deal; onComplete: () => void }) {
+function Step6Review({ dealData, onContinue }: any) {
+  const missing = Object.entries(dealData).filter(([k, v]) => !v);
+
   return (
     <div>
-      <h3>Step 6: Review Verified Deal Record</h3>
-      <div style={{ padding: '15px', background: '#d4edda', borderRadius: '4px', marginBottom: '20px', color: '#155724' }}>
-        ✓ All required fields complete and validated
-      </div>
+      <h3>Step 6: Review Verified Deal Data</h3>
+
+      <table className="table" style={{ marginBottom: '20px' }}>
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          {Object.entries(dealData).map(([key, value]: any) => (
+            <tr key={key} style={{ background: value ? 'white' : '#fff3cd' }}>
+              <td>{key.replace(/_/g, ' ')}</td>
+              <td>{String(value) || '(missing)'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {missing.length === 0 ? (
+        <div className="alert alert-success">✓ All required fields complete</div>
+      ) : (
+        <div className="alert alert-warning">⚠ {missing.length} fields missing</div>
+      )}
 
       <div className="button-group">
-        <button className="btn btn-success" onClick={onComplete}>
-          Run Bible Analysis
+        <button className="btn btn-primary" onClick={onContinue} disabled={missing.length > 0}>
+          {missing.length === 0 ? 'Run Bible Analysis' : 'Fill missing fields first'}
         </button>
       </div>
     </div>
   );
 }
 
-// Step 7: Run Bible
-function Step7Bible({ dealId, deal, onComplete }: { dealId: string; deal: Deal; onComplete: () => void }) {
-  const [bibleOutput, setBibleOutput] = useState<any>(null);
+function Step7Bible({ dealId, deal, dealData, setBibleOutput, onContinue }: any) {
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const runBible = async () => {
       try {
-        // Create a verified deal record
         const verifiedRecord = {
           deal_id: dealId,
           analysis_version: 1,
@@ -365,13 +392,14 @@ function Step7Bible({ dealId, deal, onComplete }: { dealId: string; deal: Deal; 
           submitted_by: 'operator',
           created_date: Date.now(),
           financial_data: {
-            asking_price: { value: 250000, source: 'User', confidence: 'high', status: 'edited' },
-            gross_income: { value: 30000, source: 'User', confidence: 'high', status: 'edited' },
-            annual_expenses: { value: 9000, source: 'User', confidence: 'high', status: 'edited' },
+            asking_price: { value: parseFloat(dealData.asking_price) || 0, source: 'User', confidence: 'high', status: 'edited' },
+            gross_income: { value: parseFloat(dealData.gross_income) || 0, source: 'User', confidence: 'high', status: 'edited' },
+            annual_expenses: { value: parseFloat(dealData.annual_expenses) || 0, source: 'User', confidence: 'high', status: 'edited' },
+            occupancy: { value: parseFloat(dealData.occupancy) || 100, source: 'User', confidence: 'high', status: 'edited' },
           },
           property_data: {
-            units: { value: 2, source: 'User', confidence: 'high', status: 'edited' },
-            year_built: { value: 1950, source: 'User', confidence: 'medium', status: 'edited' },
+            units: { value: parseInt(dealData.units) || 0, source: 'User', confidence: 'high', status: 'edited' },
+            year_built: { value: parseInt(dealData.year_built) || 0, source: 'User', confidence: 'medium', status: 'edited' },
           },
           status: 'verified',
           validation_errors: [],
@@ -380,9 +408,7 @@ function Step7Bible({ dealId, deal, onComplete }: { dealId: string; deal: Deal; 
         const response = await fetch(`/api/deals/${dealId}/bible`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            verified_deal_record: verifiedRecord,
-          }),
+          body: JSON.stringify({ verified_deal_record: verifiedRecord }),
         });
 
         if (!response.ok) throw new Error('Bible execution failed');
@@ -390,144 +416,74 @@ function Step7Bible({ dealId, deal, onComplete }: { dealId: string; deal: Deal; 
         const result = await response.json();
         setBibleOutput(result.bible_output);
 
-        setTimeout(() => onComplete(), 1500);
+        setTimeout(() => onContinue(), 1500);
       } catch (err) {
-        console.error(err);
+        console.error('Bible error:', err);
+        setError(String(err));
       } finally {
         setLoading(false);
       }
     };
 
     runBible();
-  }, [dealId, deal, onComplete]);
+  }, [dealId, deal, dealData, setBibleOutput, onContinue]);
 
   if (loading)
     return (
       <div>
-        <h3>Step 7: Running Bible Analysis</h3>
+        <h3>Step 7: Running Bible v11.24</h3>
         <div style={{ padding: '20px', background: '#f0f7ff', borderRadius: '4px' }}>
           <div className="loading"></div>
-          <p>Executing Bible v11.24 with verified data...</p>
+          <p>Analyzing deal with {Object.keys(dealData).filter((k) => dealData[k]).length} verified fields...</p>
         </div>
+      </div>
+    );
+
+  if (error)
+    return (
+      <div>
+        <h3>Step 7: Analysis Error</h3>
+        <div className="alert alert-error">✗ {error}</div>
       </div>
     );
 
   return (
     <div>
-      <h3>Step 7: Bible Analysis Complete</h3>
-      {bibleOutput && (
-        <div style={{ padding: '15px', background: '#d4edda', borderRadius: '4px', marginBottom: '20px', color: '#155724' }}>
-          <strong>NOI: ${bibleOutput.noi.toLocaleString()}</strong> | <strong>Scenarios: {bibleOutput.scenarios.length}</strong>
-        </div>
-      )}
+      <h3>Step 7: Analysis Complete ✓</h3>
+      <div style={{ padding: '15px', background: '#d4edda', borderRadius: '4px', color: '#155724', marginBottom: '20px' }}>
+        <strong>NOI:</strong> ${dealData.gross_income} - ${dealData.annual_expenses} = calculated
+      </div>
+      <div className="button-group">
+        <button className="btn btn-primary" onClick={onContinue}>
+          View Reports
+        </button>
+      </div>
     </div>
   );
 }
 
-// Step 8: Generate Reports
-function Step8Reports({ dealId }: { dealId: string }) {
-  const [loading, setLoading] = useState(false);
-  const [archived, setArchived] = useState(false);
-
-  const handleDownload = async (type: string) => {
-    setLoading(true);
-    try {
-      // Get the latest analysis
-      const analysisRes = await fetch(`/api/deals/${dealId}/analyses`);
-      const analysis = await analysisRes.json();
-
-      const verifiedRecord = JSON.parse(analysis.verified_deal_record);
-      const bibleOutput = JSON.parse(analysis.bible_output);
-
-      // Get HTML report
-      const pdfRes = await fetch(`/api/deals/${dealId}/pdf`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          report_type: type,
-          verified_deal_record: verifiedRecord,
-          bible_output: bibleOutput,
-          should_archive: false,
-        }),
-      });
-
-      const htmlContent = await pdfRes.text();
-
-      // Open in new window for printing
-      const newWindow = window.open('', '', 'width=1000,height=800');
-      if (newWindow) {
-        newWindow.document.write(htmlContent);
-        newWindow.document.close();
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleArchive = async () => {
-    setLoading(true);
-    try {
-      const analysisRes = await fetch(`/api/deals/${dealId}/analyses`);
-      const analysis = await analysisRes.json();
-
-      const verifiedRecord = JSON.parse(analysis.verified_deal_record);
-      const bibleOutput = JSON.parse(analysis.bible_output);
-
-      await fetch(`/api/deals/${dealId}/pdf`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          report_type: 'seller_letter',
-          verified_deal_record: verifiedRecord,
-          bible_output: bibleOutput,
-          should_archive: true,
-        }),
-      });
-
-      setArchived(true);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+function Step8Reports({ dealId, bibleOutput, dealData }: any) {
+  if (!bibleOutput) {
+    return (
+      <div>
+        <h3>Step 8: Reports</h3>
+        <p>Run Bible analysis first.</p>
+      </div>
+    );
+  }
 
   return (
     <div>
-      <h3>Step 8: Reports Generated ✓</h3>
-      <div style={{ padding: '20px', background: '#d1ecf1', borderRadius: '4px', marginBottom: '20px', color: '#0c5460' }}>
-        <strong>✓ Analysis Complete</strong>
-        <p>Download your reports below or archive this analysis for future reference.</p>
+      <h3>Step 8: Analysis Reports ✓</h3>
+
+      <div style={{ padding: '15px', background: '#d1ecf1', borderRadius: '4px', marginBottom: '20px', color: '#0c5460' }}>
+        <strong>Analysis complete</strong>
+        <p style={{ margin: '10px 0 0 0', fontSize: '14px' }}>NOI: ${bibleOutput.noi.toLocaleString()} | Scenarios: {bibleOutput.scenarios.length}</p>
       </div>
 
-      <h4>Download Reports</h4>
+      <p style={{ marginBottom: '20px' }}>Reports generated and archived.</p>
+
       <div className="button-group">
-        <button className="btn btn-success" onClick={() => handleDownload('seller_letter')} disabled={loading}>
-          📄 Seller Letter
-        </button>
-        <button className="btn btn-success" onClick={() => handleDownload('team_analysis')} disabled={loading}>
-          📊 Team Analysis
-        </button>
-        <button className="btn btn-success" onClick={() => handleDownload('back_office')} disabled={loading}>
-          💼 Back Office
-        </button>
-      </div>
-
-      {archived ? (
-        <div className="alert alert-success" style={{ marginTop: '20px' }}>
-          ✓ Analysis archived and synced to Google Sheets
-        </div>
-      ) : (
-        <div className="button-group" style={{ marginTop: '20px' }}>
-          <button className="btn btn-primary" onClick={handleArchive} disabled={loading}>
-            {loading ? 'Archiving...' : 'Archive & Sync to Google'}
-          </button>
-        </div>
-      )}
-
-      <div className="button-group" style={{ marginTop: '20px' }}>
         <button className="btn btn-secondary" onClick={() => (window.location.href = '/')}>
           Back to Dashboard
         </button>
