@@ -1,0 +1,10 @@
+{
+  "framework": "nextjs",
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
+  "env": {
+    "DATABASE_PATH": "./data/analyses.db",
+    "NEXT_PUBLIC_APP_NAME": "Raw Deal Verifier",
+    "NEXT_PUBLIC_BIBLE_VERSION": "11.24"
+  }
+}
